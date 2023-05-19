@@ -1,124 +1,131 @@
-# DistributedCache
+# MediatR.Patterns.Builder
+
+MediatR.Patterns.Builder Sits on top of MediatR and exposes PreProcess, Process and PostProcess methods to handlers instead of only exposing the Handle method allowing to implement handlers using the builder pattern.
 
 
-DistributedCache is an open source caching abstraction layer for .NET which supports Redis, SQL Server, InMemory, with automatic
-failure recovery, heath checks, automatic table generation (MSSQL), logging and also allows to clear all keys.
+It simplifies common usage of Mediatr integrating interfaces to differentiate between commands and queries and also automatically creating a
+behavior pipeline to apply FluentValidation checks.
 
-
-It simplifies cache usage by allowing developers to inject it into the application and use it anywhere
-without having to worry about configuration for an specific infrastructure (InMemory, Redis, SQL server).
-
-It is as fast as a cache interface can be and also includes the feature of **CLEAR ALL** keys and **CLEAR ALL WITH PREFIX** which were both 
-missing from IDistributedCache.
+It is as fast as the vanilla version and helps reduce the development process by having a defined pattern within handlers.
 
 
 ------------------------------
 
 ### Usage
 
-#### Setting/Getting values from cache
+#### Handlers
 
-Just inject and use the ICache interface to store or obtain values from the cache like the example below:
+Inherit from the abstract class BuilderRequestHandler setting what the request and the response are.
+
+In below example, if the cache has a value, it returns from the `PreProcess` method directly without going to the `Process` method but
+if not (and returns `null`) the `Process` method and then `PostProcess` method will execute in sequence.
 
 ```csharp
 
-public class CountryManager
+public class GetAllCountriesHandler : BuilderRequestHandler<GetAllCountries, List<CountryData>>
 {
+    private readonly ILogger<GetAllCountriesHandler> _logger;
     private readonly ICache _cache;
+    private readonly IRepository _repository;
 
-    public CountryManager(ICache cache)
+    public GetAllCountriesHandler(ICache cache, ILogger<GetAllCountriesHandler> logger, IRepository repository)
     {
+        _logger = logger;
         _cache = cache;
+        _repository = repository;
     }
 
-    public async Task<List<CountryData>> GetAllCountriesAsync(CancellationToken cancellationToken)
+    protected override async Task<List<CountryData>> PreProcess(GetAllCountries request, CancellationToken cancellationToken = default)
     {
-        var cacheKey = "some cache key";
+        var cacheKey = GetCacheKey();
 
         var cachedValue = await _cache.GetCacheValueAsync<List<CountryData>>(cacheKey, cancellationToken);
-        if (cachedValue != null)
+        if (cachedValue == null) return null;
+        
+        _logger.LogInformation("Cache value found for {CacheKey}", cacheKey);
+        return cachedValue;
+    }
+    
+    protected override async Task<List<CountryData>> Process(GetAllCountries request, CancellationToken cancellationToken = default)
+    {
+        return await GetAllCountries();
+    }
+
+    protected override Task PostProcess(GetAllCountries request, List<CountryData> response, CancellationToken cancellationToken = default)
+    {
+        if (response != null)
         {
-            return cachedValue;
+            _ = _cache.SetCacheValueAsync(GetCacheKey(), response, cancellationToken);
         }
 
-        var dataValue = await GetAllCountriesFromRepositoryAsync();
-        _ = _cache.SetCacheValueAsync(cacheKey, dataValue);
-
-        return dataValue;
+        return Task.CompletedTask;
     }
 }
 
 ```
 
-#### Setting cache TTL
+#### Differentiate between Query and Command
 
-There are 2 ways to achieve that:
+- For queries instead of using `IRequest` use `IQuery`
+- For commands instead of using `IRequest` use `ICommand`
 
-1. Using a default TTL (see configuration section)
-2. Overriding the default TTL on a case-by-case basis like this:
+By doing this can further expand your pipeline behaviors and act according to the type of request.
 
 ```csharp
 
-var ttl = new DistributedCacheEntryOptions
+public class GetAllCountries : IQuery<List<CountryData>>
 {
-    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60),
-    SlidingExpiration = TimeSpan.FromSeconds(30)
-};
-_ = _cache.SetCacheValueAsync(cacheKey, dataValue, ttl, cancellationToken);
+    ... some properties
+}
+
+public class AddCountry : ICommand<List<CountryData>>
+{
+    ... some properties
+}
+
+```
+
+#### Setting FluentValidation
+
+Just create the validations related to the request you will be handling like you normally do:
+
+```csharp
+
+public class GetAllCountries : IQuery<List<CountryData>>
+{
+    ... some properties
+}
+
+public class GetAllCitiesValidator : AbstractValidator<GetAllCountries>
+{
+    public GetAllCitiesValidator()
+    {
+        RuleFor(x => x).NotNull();
+        
+        ... more fluentValidation rules
+    }
+}
 
 ```
 
 
 ### Configuration
 
-#### Scenario 1: InMemory Cache
+#### Dependency Injection
 
-This is the most basic, yet common, scenario in which the application uses a cache in memory to increase the performance of a single
-instance of an application.
+Just as Mediatr, you can pass the assemblies to scan for handlers and those assemblies can be also used by FluentValidation if `AddFluentValidation`
+is set to true so it internally creates a pipeline behavior to validate before going to the handler.
 
 ```csharp
-services.AddDistributedCache(options =>
+services.AddMediatrBuilder(options =>
 {
-    options.Configure(CacheType.InMemory);
+    options.RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly(), ... more assemblies)
+    options.AddFluentValidation(true);
 });
 ```
 
 ###
 
-#### Scenario 2: Redis with automatic failure recovery
-
-This configuration use redis infrastructure and will check if it is healthy, in case of repeated failures (`maxErrorsAllowed`) it will automatically
-disable the cache and will check again in the interval given (`resetIntervalMinutes`).
-
-```csharp
-var connectionString = "some cache connection string";
-services.AddDistributedCache(options =>
-{
-    options.Configure(CacheType.Redis, connectionString, "myApplicationCacheInstance")
-        .ConfigureHealthCheck(enabled:true, maxErrorsAllowed:5, resetIntervalMinutes:2);
-});
-```
-
-###
-
-#### Scenario 3: SQL Server with automatic failure recovery
-
-This configuration use redis infrastructure and will check if it is healthy, in case of repeated failures (`maxErrorsAllowed`) it will automatically
-disable the cache and will check again in the interval given (`resetIntervalMinutes`).
-
-```csharp
-var connectionString = "some cache connection string";
-services.AddDistributedCache(options =>
-{
-    options.Configure(CacheType.SqlServer, connectionString, "myApplicationCacheInstance")
-        .ConfigureHealthCheck(enabled:true, maxErrorsAllowed:5, resetIntervalMinutes:2)
-        .AddDefaultTtl(TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(30))
-        .DisableCache(false);
-});
-```
-
-
-###
 
 ## Contributing
 
