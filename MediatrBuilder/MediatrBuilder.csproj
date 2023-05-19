@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net7.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PackageId>Mediatr.Patterns.Builder</PackageId>
+        <Authors>Sluk4d</Authors>
+        <Company>Matozap</Company>
+        <Product>Mediatr.Patterns.Builder</Product>
+        <Description>Mediatr.Patterns.Builder is an open source Mediatr abstraction layer </Description>
+        <Copyright>Matozap</Copyright>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <PackageTags>Builder Pattern, Mediatr, FluentValidation, Pipeline, Behavior, Builder, CQRS, Matozap</PackageTags>
+        <PackageReleaseNotes>Release</PackageReleaseNotes>
+        <RepositoryType>Github</RepositoryType>
+        <RepositoryUrl>https://github.com/Matozap/MediatR.Patterns.Builder</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/Matozap/MediatR.Patterns.Builder</PackageProjectUrl>
+        <PackageIcon>logo.png</PackageIcon>
+        <PackageReadmeFile>NUGET.md</PackageReadmeFile>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <Version>7.0.1</Version>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.5.2" />
+      <PackageReference Include="MediatR" Version="12.0.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="logo.png" Pack="true" PackagePath="\" />
+        <None Include="NUGET.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+</Project>
